@@ -9,10 +9,11 @@ import { spawnSync } from 'child_process';
 import fs from 'fs';
 import os from 'os';
 import pathMod from 'path';
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import stringWidth from 'string-width';
 import { unescapePath } from '@google/gemini-cli-core';
 import { toCodePoints, cpLen, cpSlice } from '../../utils/textUtils.js';
+import { isPowerShell } from '../../utils/detectTerminal.js';
 
 export type Direction =
   | 'left'
@@ -426,6 +427,10 @@ export function useTextBuffer({
     [number, number] | null
   >(null); // Logical selection
 
+  // PowerShell paste buffer (local to this hook)
+  const psPasteBuffer = useRef('');
+  const psPasteTimer = useRef<NodeJS.Timeout | null>(null);
+
   // Visual state
   const [visualLines, setVisualLines] = useState<string[]>(['']);
   const [visualCursor, setVisualCursor] = useState<[number, number]>([0, 0]);
@@ -672,6 +677,17 @@ export function useTextBuffer({
 
       ch = stripUnsafeCharacters(ch);
 
+      // PowerShell workaround: always append at the end when pasting
+      if (isPowerShell() && ch.length === 1) {
+        psPasteBuffer.current += ch;
+        if (psPasteTimer.current) clearTimeout(psPasteTimer.current);
+        psPasteTimer.current = setTimeout(() => {
+          applyOperations([{ type: 'insert', payload: psPasteBuffer.current }]);
+          psPasteBuffer.current = '';
+        }, 24);
+        return;
+      }
+
       // Arbitrary threshold to avoid false positives on normal key presses
       // while still detecting virtually all reasonable length file paths.
       const minLengthToInferAsDragDrop = 3;
@@ -694,7 +710,7 @@ export function useTextBuffer({
       }
       applyOperations([{ type: 'insert', payload: ch }]);
     },
-    [applyOperations, cursorRow, cursorCol, isValidPath, insertStr],
+    [applyOperations, cursorRow, cursorCol, isValidPath, insertStr, lines],
   );
 
   const newline = useCallback((): void => {
