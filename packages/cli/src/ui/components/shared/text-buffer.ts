@@ -710,7 +710,7 @@ export function useTextBuffer({
       }
       applyOperations([{ type: 'insert', payload: ch }]);
     },
-    [applyOperations, cursorRow, cursorCol, isValidPath, insertStr, lines],
+    [applyOperations, cursorRow, cursorCol, isValidPath, insertStr],
   );
 
   const newline = useCallback((): void => {
